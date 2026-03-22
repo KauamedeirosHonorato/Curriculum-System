@@ -1,4 +1,4 @@
-# Gerador de Currículos ATS-Friendly ("Anti-Robô") 🤖✨
+# Gerador de Currículos ATS-Friendly 
 
 ## Por que este projeto foi criado?
 Milhares de candidatos qualificados são sumariamente rejeitados em processos seletivos simplesmente porque seus currículos não conseguem ser interpretados pelos sistemas ATS (Applicant Tracking Systems, ou "Robôs de RH" como Gupy, Kenoby, Workday). Muitos candidatos cometem o erro de criar currículos lindos em plataformas de design, cheios de colunas, ícones e gráficos radiais, mas os robôs leem apenas texto linear e acabam embaralhando toda a informação, resultando em pontuações baixas.
@@ -25,4 +25,3 @@ Quando o usuário clica em "Gerar PDF", o navegador invoca uma versão de impres
 2. Instale as dependências: `npm install`
 3. Inicie o servidor: `npm run dev`
 4. Abra o navegador no Localhost indicado e comece!
-# Sistema-curricular
