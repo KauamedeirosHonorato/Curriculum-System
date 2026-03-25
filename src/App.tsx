@@ -2,6 +2,7 @@ import { useState, useEffect, useRef } from 'react';
 import * as pdfjsLib from 'pdfjs-dist';
 import pdfWorkerUrl from 'pdfjs-dist/build/pdf.worker.mjs?url';
 import './index.css';
+import { autocorrectPtBr } from './ptBrAutocorrect';
 
 // Configurando o Worker do PDF.js resolvido localmente pelo Vite
 pdfjsLib.GlobalWorkerOptions.workerSrc = pdfWorkerUrl;
@@ -13,24 +14,47 @@ const JUNIOR_TIPS = [
   '💡 Sem emprego formal? Projetos pessoais, cursos e freelances contam! Coloque tudo.',
   '💡 Copie o título EXATO da vaga no campo Cargo — ATS busca correspondência de palavras.',
   '💡 GitHub ativo vale muito! Repositórios com README detalhado mostram seus projetos.',
-  '💡 Descreva projetos dizendo qual problema resolvem, não apenas as tecnologias usadas.',
-  '💡 Soft skills também importam! Adicione Comunicação e Trabalho em Equipe nas habilidades.',
+  '💡 Use a fórmula de impacto: "Desenvolvi [solução] utilizando [tecnologia], resultando em [melhoria mensurável]".',
+  '💡 Separe Hard Skills (tecnologias) de Soft Skills (comportamentos) para facilitar o parsing do ATS.',
   '💡 Alcance 80-120 palavras no Resumo. Seja direto e mencione sua stack principal.',
   '💡 Certificados gratuitos como DIO, Alura e Coursera somam pontos mesmo sem diploma.',
   '💡 Currículo em PT para empresas BR, em EN para startups ou vagas internacionais.',
+  '💡 Projetos open-source ou sistemas do zero (mesmo pequenos) provam sua capacidade arquitetural mais do que cursos!',
 ];
 
-// Sugestões de habilidades pré-definidas para devs iniciantes
-const SKILL_SUGGESTIONS = [
-  'React', 'Node.js', 'TypeScript', 'JavaScript', 'Python', 'HTML/CSS',
-  'Git', 'PostgreSQL', 'MySQL', 'Docker', 'REST APIs', 'Next.js',
-  'Vue.js', 'Express', 'MongoDB', 'Figma', 'Linux',
+// Sugestões de habilidades técnicas (Hard Skills)
+const HARD_SKILL_SUGGESTIONS = [
+  'React', 'Node.js', 'TypeScript', 'JavaScript', 'Python', 'Java',
+  'Spring Boot', 'HTML/CSS', 'Git', 'PostgreSQL', 'MySQL', 'Docker',
+  'REST APIs', 'Next.js', 'Vue.js', 'Express', 'MongoDB', 'Figma', 'Linux',
+];
+
+// Sugestões de habilidades comportamentais (Soft Skills)
+const SOFT_SKILL_SUGGESTIONS = [
   'Comunicação', 'Trabalho em equipe', 'Resolução de problemas',
+  'Liderança técnica', 'Proatividade', 'Adaptabilidade',
+  'Pensamento crítico', 'Gestão de tempo', 'Colaboração',
 ];
 
 // Decodifica URLs com %C3%A3 e similares para exibição limpa
 function safeDecodeURI(str: string): string {
   try { return decodeURIComponent(str); } catch { return str; }
+}
+
+// Normaliza qualquer formato de URL social para exibir apenas o handle/slug
+function cleanSocialUrl(raw: string, platform: 'linkedin' | 'github' | 'instagram' | 'portfolio'): string {
+  if (!raw.trim()) return '';
+  const decoded = safeDecodeURI(raw.trim());
+  const patterns: Record<string, RegExp> = {
+    linkedin:  /^(?:https?:\/\/)?(?:www\.)?linkedin\.com\/in\/([^/?#\s]+)\/?/i,
+    github:    /^(?:https?:\/\/)?(?:www\.)?github\.com\/([^/?#\s]+)\/?/i,
+    instagram: /^(?:https?:\/\/)?(?:www\.)?instagram\.com\/([^/?#\s]+)\/?/i,
+    portfolio: /^(?:https?:\/\/)?(?:www\.)?(.+?)\/?$/i,
+  };
+  const match = decoded.match(patterns[platform]);
+  if (match) return match[1].replace(/\/$/, '');
+  // Se não há domínio reconhecível, devolve o raw limpo (já é só o handle)
+  return decoded.replace(/\/$/, '');
 }
 
 function loadFromStorage<T>(key: string, fallback: T): T {
@@ -111,7 +135,8 @@ export default function App() {
   const saveTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const importInputRef = useRef<HTMLInputElement>(null);
   const [tipIndex] = useState(() => Math.floor(Math.random() * JUNIOR_TIPS.length));
-  const [skillInput, setSkillInput] = useState('');
+  const [hardSkillInput, setHardSkillInput] = useState('');
+  const [softSkillInput, setSoftSkillInput] = useState('');
 
   const [personalInfo, setPersonalInfo] = useState(() =>
     loadFromStorage('personalInfo', {
@@ -129,8 +154,11 @@ export default function App() {
       { institution: '', course: '', period: '' }
     ])
   );
-  const [skills, setSkills] = useState<string[]>(() =>
-    loadFromStorage<string[]>('skills', []).filter((s: string) => s.trim() !== '')
+  const [hardSkills, setHardSkills] = useState<string[]>(() =>
+    loadFromStorage<string[]>('hardSkills', loadFromStorage<string[]>('skills', [])).filter((s: string) => s.trim() !== '')
+  );
+  const [softSkills, setSoftSkills] = useState<string[]>(() =>
+    loadFromStorage<string[]>('softSkills', []).filter((s: string) => s.trim() !== '')
   );
   const [projects, setProjects] = useState(() =>
     loadFromStorage('projects', [{ name: '', tech: '', link: '', description: '' }])
@@ -148,7 +176,7 @@ export default function App() {
     saveTimerRef.current = setTimeout(() => {
       try {
         localStorage.setItem(STORAGE_KEY, JSON.stringify({
-          template, personalInfo, experiences, educations, skills, projects, languages, certifications
+          template, personalInfo, experiences, educations, hardSkills, softSkills, projects, languages, certifications
         }));
         setSavedBadge(true);
         setTimeout(() => setSavedBadge(false), 2000);
@@ -159,7 +187,7 @@ export default function App() {
     return () => {
       if (saveTimerRef.current) clearTimeout(saveTimerRef.current);
     };
-  }, [template, personalInfo, experiences, educations, skills, projects, languages, certifications]);
+  }, [template, personalInfo, experiences, educations, hardSkills, softSkills, projects, languages, certifications]);
 
   const handlePrint = () => {
     window.print();
@@ -264,18 +292,31 @@ export default function App() {
     setEducations(newArray);
   };
 
-  // ─── SKILL TAGS ───────────────────────────────────────────────────────────
-  const addSkill = (value: string) => {
+  // ─── HARD SKILL TAGS ──────────────────────────────────────────────────────
+  const addHardSkill = (value: string) => {
     const trimmed = value.trim().replace(/,+$/, '').trim();
-    if (trimmed.length > 0 && !skills.includes(trimmed)) setSkills(prev => [...prev, trimmed]);
-    setSkillInput('');
+    if (trimmed.length > 0 && !hardSkills.includes(trimmed)) setHardSkills(prev => [...prev, trimmed]);
+    setHardSkillInput('');
   };
-  const removeSkill = (index: number) => setSkills(skills.filter((_, i) => i !== index));
-  const handleSkillKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
-    if (e.key === 'Enter' || e.key === ',') { e.preventDefault(); addSkill(skillInput); }
-    if (e.key === 'Backspace' && skillInput === '' && skills.length > 0) setSkills(skills.slice(0, -1));
+  const removeHardSkill = (index: number) => setHardSkills(hardSkills.filter((_, i) => i !== index));
+  const handleHardSkillKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
+    if (e.key === 'Enter' || e.key === ',') { e.preventDefault(); addHardSkill(hardSkillInput); }
+    if (e.key === 'Backspace' && hardSkillInput === '' && hardSkills.length > 0) setHardSkills(hardSkills.slice(0, -1));
   };
-  const availableSuggestions = SKILL_SUGGESTIONS.filter(s => !skills.includes(s));
+  const availableHardSuggestions = HARD_SKILL_SUGGESTIONS.filter(s => !hardSkills.includes(s));
+
+  // ─── SOFT SKILL TAGS ──────────────────────────────────────────────────────
+  const addSoftSkill = (value: string) => {
+    const trimmed = value.trim().replace(/,+$/, '').trim();
+    if (trimmed.length > 0 && !softSkills.includes(trimmed)) setSoftSkills(prev => [...prev, trimmed]);
+    setSoftSkillInput('');
+  };
+  const removeSoftSkill = (index: number) => setSoftSkills(softSkills.filter((_, i) => i !== index));
+  const handleSoftSkillKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
+    if (e.key === 'Enter' || e.key === ',') { e.preventDefault(); addSoftSkill(softSkillInput); }
+    if (e.key === 'Backspace' && softSkillInput === '' && softSkills.length > 0) setSoftSkills(softSkills.slice(0, -1));
+  };
+  const availableSoftSuggestions = SOFT_SKILL_SUGGESTIONS.filter(s => !softSkills.includes(s));
   const updateProject = (index: number, field: string, value: string) => {
     const a = [...projects]; a[index] = { ...a[index], [field]: value }; setProjects(a);
   };
@@ -288,7 +329,8 @@ export default function App() {
 
   const summaryWordCount = personalInfo.summary.trim().split(/\s+/).filter(Boolean).length;
   const [atsOpen, setAtsOpen] = useState(true);
-  const ats = calcATSScore(personalInfo, experiences, skills, projects, languages, certifications);
+  const allSkills = [...hardSkills, ...softSkills];
+  const ats = calcATSScore(personalInfo, experiences, allSkills, projects, languages, certifications);
 
   const clearDraft = () => {
     if (!confirm('Tem certeza? Isso apagará todos os dados preenchidos.')) return;
@@ -296,7 +338,8 @@ export default function App() {
     setPersonalInfo({ name: '', role: '', email: '', phone: '', location: '', summary: '', linkedin: '', github: '', instagram: '', portfolio: '' });
     setExperiences([{ company: '', position: '', period: '', description: '' }]);
     setEducations([{ institution: '', course: '', period: '' }]);
-    setSkills([]);
+    setHardSkills([]);
+    setSoftSkills([]);
     setProjects([{ name: '', tech: '', link: '', description: '' }]);
     setLanguages([{ name: '', level: 'Básico' }]);
     setCertifications([{ name: '', issuer: '', year: '' }]);
@@ -305,7 +348,7 @@ export default function App() {
 
   // ─── EXPORT / IMPORT JSON ─────────────────────────────────────────────────
   const exportJSON = () => {
-    const data = { template, personalInfo, experiences, educations, skills, projects, languages, certifications };
+    const data = { template, personalInfo, experiences, educations, hardSkills, softSkills, projects, languages, certifications };
     const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
     const url = URL.createObjectURL(blob);
     const a = document.createElement('a');
@@ -323,7 +366,10 @@ export default function App() {
         if (data.personalInfo) setPersonalInfo({ name: '', role: '', email: '', phone: '', location: '', summary: '', linkedin: '', github: '', instagram: '', portfolio: '', ...data.personalInfo });
         if (data.experiences) setExperiences(data.experiences);
         if (data.educations) setEducations(data.educations);
-        if (data.skills) setSkills(data.skills);
+        // compatibilidade com backups antigos que usavam 'skills'
+        if (data.hardSkills) setHardSkills(data.hardSkills);
+        else if (data.skills) setHardSkills(data.skills);
+        if (data.softSkills) setSoftSkills(data.softSkills);
         if (data.projects) setProjects(data.projects);
         if (data.languages) setLanguages(data.languages);
         if (data.certifications) setCertifications(data.certifications);
@@ -350,8 +396,11 @@ ${experiences.filter(e => e.company).map(e => `${e.position} na ${e.company} (${
 FORMAÇÃO ACADÊMICA
 ${educations.filter(e => e.institution).map(e => `${e.course} - ${e.institution} (${e.period})`).join('\n')}
 
-HABILIDADES
-${skills.filter(s => s.trim()).join(', ')}
+HARD SKILLS
+${hardSkills.filter(s => s.trim()).join(', ')}
+
+SOFT SKILLS
+${softSkills.filter(s => s.trim()).join(', ')}
 
 PROJETOS
 ${projects.filter(p => p.name).map(p => `${p.name} - ${p.tech}\n${p.description}`).join('\n\n')}
@@ -461,7 +510,7 @@ ${certifications.filter(c => c.name).map(c => `${c.name} - ${c.issuer} (${c.year
             </div>
           </div>
             <label style={{marginTop: '1rem'}}>Resumo Profissional <Tip text="Sem experiência? Fale sua stack, projetos pessoais que você criou e o que quer aprender. Seja honesto e direto." /></label>
-          <textarea rows={4} value={personalInfo.summary} onChange={e => setPersonalInfo({...personalInfo, summary: e.target.value})} placeholder="Desenvolvedor em formação com foco em React e Node.js. Construí projetos como [X] e [Y], disponíveis no GitHub. Busco primeira oportunidade como Dev Júnior para evoluir com times experientes." />
+          <textarea rows={4} value={personalInfo.summary} onChange={e => setPersonalInfo({...personalInfo, summary: e.target.value})} onBlur={e => setPersonalInfo(p => ({ ...p, summary: autocorrectPtBr(e.target.value) }))} placeholder="Desenvolvedor em formação com foco em React e Node.js. Construí projetos como [X] e [Y], disponíveis no GitHub. Busco primeira oportunidade como Dev Júnior para evoluir com times experientes." />
           <div style={{ display: 'flex', justifyContent: 'flex-end', marginTop: '-0.75rem', marginBottom: '0.5rem' }}>
             <span className={`word-counter ${summaryWordCount > 120 ? 'word-counter--over' : summaryWordCount >= 60 ? 'word-counter--good' : ''}`}>
               {summaryWordCount} palavra{summaryWordCount !== 1 ? 's' : ''} {summaryWordCount >= 60 && summaryWordCount <= 120 ? '✅' : summaryWordCount > 120 ? '⚠️ curto ideal: 80-120' : '(ideal: 80-120)'}
@@ -491,8 +540,8 @@ ${certifications.filter(c => c.name).map(c => `${c.name} - ${c.issuer} (${c.year
                   <input type="text" value={exp.period} onChange={e => updateExp(index, 'period', e.target.value)} placeholder="Ex: Jan 2020 - Atual" />
                 </div>
                 <div style={{ gridColumn: 'span 2' }}>
-                  <label>Descrição e Conquistas <Tip text='Use verbos: "Desenvolvi uma API que...", "Implementei autenticação JWT...", "Reduzi o carregamento em 30%..."' /></label>
-                  <textarea rows={3} value={exp.description} onChange={e => updateExp(index, 'description', e.target.value)} placeholder='Ex: Desenvolvi uma aplicação full-stack com React e Node.js. Implementei autenticação JWT e integrei com PostgreSQL.' />
+                  <label>Descrição e Conquistas <Tip text='Fórmula de impacto: "Desenvolvi [solução] utilizando [tecnologia], resultando em [melhoria mensurável]". Ex: Arquitetei o módulo de agendamentos utilizando Spring Boot + React, resultando em redução de 40% no tempo de atendimento.' /></label>
+                  <textarea rows={3} value={exp.description} onChange={e => updateExp(index, 'description', e.target.value)} onBlur={e => updateExp(index, 'description', autocorrectPtBr(e.target.value))} placeholder='Fórmula: Desenvolvi [solução] utilizando [tecnologia], resultando em [impacto]. Ex: Arquitetei o módulo de agendamentos utilizando Spring Boot e React, resultando em 40% de redução no tempo de atendimento dos clientes.' />
                 </div>
               </div>
               {experiences.length > 1 && (
@@ -512,7 +561,7 @@ ${certifications.filter(c => c.name).map(c => `${c.name} - ${c.issuer} (${c.year
             <div key={index} style={{ marginBottom: '1.5rem', padding: '1.5rem', backgroundColor: 'var(--bg-surface)', borderRadius: '8px' }}>
               <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1rem' }}>
                 <div style={{ gridColumn: 'span 2' }}>
-                  <label>Instituição <Tip text="FATEC, ETEC, bootcamp, curso técnico — tudo conta! Não precisa ter faculdade tradional." /></label>
+                  <label>Instituição <Tip text="FATEC, ETEC, bootcamp, curso técnico — tudo conta! Não precisa ter faculdade tradicional." /></label>
                   <input type="text" value={edu.institution} onChange={e => updateEdu(index, 'institution', e.target.value)} placeholder="Ex: FATEC, Rocketseat, DIO..." />
                 </div>
                 <div>
@@ -534,36 +583,63 @@ ${certifications.filter(c => c.name).map(c => `${c.name} - ${c.issuer} (${c.year
 
         <section style={{ marginTop: '2rem' }}>
           <h2 style={{ fontSize: '1.2rem', marginBottom: '1rem', color: 'var(--accent-color)', display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
-            5. Habilidades
-            <SectionBadge ok={skills.filter(s => s.trim()).length >= 5} empty={skills.length === 0} />
-            <Tip text="Inclua tecnologias que domina E as listadas na vaga. Soft skills também contam!" />
+            5. Habilidades e Competências
+            <SectionBadge ok={(hardSkills.length + softSkills.length) >= 5} empty={hardSkills.length === 0 && softSkills.length === 0} />
+            <Tip text="Separe Hard Skills (linguagens, frameworks, ferramentas) de Soft Skills (comportamentos). Isso melhora o parsing do ATS e facilita a leitura do recrutador." />
           </h2>
 
-          {/* TAG INPUT */}
+          {/* HARD SKILLS */}
+          <label style={{ marginBottom: '0.4rem', display: 'block', fontWeight: '600' }}>🖥️ Hard Skills <span style={{ fontSize: '0.8rem', color: 'var(--text-secondary)', fontWeight: 'normal' }}>(linguagens, frameworks, ferramentas)</span></label>
           <div className="skill-tags-container">
-            {skills.map((skill, index) => (
+            {hardSkills.map((skill, index) => (
               <span key={index} className="skill-tag">
                 {skill}
-                <button type="button" className="skill-tag-remove" onClick={() => removeSkill(index)} aria-label={`Remover ${skill}`}>×</button>
+                <button type="button" className="skill-tag-remove" onClick={() => removeHardSkill(index)} aria-label={`Remover ${skill}`}>×</button>
               </span>
             ))}
             <input
               className="skill-tag-input"
               type="text"
-              value={skillInput}
-              onChange={e => setSkillInput(e.target.value)}
-              onKeyDown={handleSkillKeyDown}
-              onBlur={() => skillInput.trim() && addSkill(skillInput)}
-              placeholder={skills.length === 0 ? 'Digite e pressione Enter para adicionar...' : 'Adicionar mais...'}
+              value={hardSkillInput}
+              onChange={e => setHardSkillInput(e.target.value)}
+              onKeyDown={handleHardSkillKeyDown}
+              onBlur={() => hardSkillInput.trim() && addHardSkill(hardSkillInput)}
+              placeholder={hardSkills.length === 0 ? 'Ex: React, Java, Docker — pressione Enter...' : 'Adicionar mais...'}
             />
           </div>
-
-          {/* SUGESTÕES */}
-          {availableSuggestions.length > 0 && (
+          {availableHardSuggestions.length > 0 && (
             <div className="skill-suggestions">
-              <span className="skill-suggestions-label">💡 Sugestões:</span>
-              {availableSuggestions.slice(0, 14).map(s => (
-                <button key={s} type="button" className="skill-suggestion-btn" onClick={() => addSkill(s)}>{s}</button>
+              <span className="skill-suggestions-label">💡 Sugestões técnicas:</span>
+              {availableHardSuggestions.slice(0, 12).map(s => (
+                <button key={s} type="button" className="skill-suggestion-btn" onClick={() => addHardSkill(s)}>{s}</button>
+              ))}
+            </div>
+          )}
+
+          {/* SOFT SKILLS */}
+          <label style={{ marginTop: '1.25rem', marginBottom: '0.4rem', display: 'block', fontWeight: '600' }}>🤝 Soft Skills <span style={{ fontSize: '0.8rem', color: 'var(--text-secondary)', fontWeight: 'normal' }}>(comportamentos, habilidades interpessoais)</span></label>
+          <div className="skill-tags-container">
+            {softSkills.map((skill, index) => (
+              <span key={index} className="skill-tag skill-tag--soft">
+                {skill}
+                <button type="button" className="skill-tag-remove" onClick={() => removeSoftSkill(index)} aria-label={`Remover ${skill}`}>×</button>
+              </span>
+            ))}
+            <input
+              className="skill-tag-input"
+              type="text"
+              value={softSkillInput}
+              onChange={e => setSoftSkillInput(e.target.value)}
+              onKeyDown={handleSoftSkillKeyDown}
+              onBlur={() => softSkillInput.trim() && addSoftSkill(softSkillInput)}
+              placeholder={softSkills.length === 0 ? 'Ex: Comunicação, Liderança técnica — pressione Enter...' : 'Adicionar mais...'}
+            />
+          </div>
+          {availableSoftSuggestions.length > 0 && (
+            <div className="skill-suggestions">
+              <span className="skill-suggestions-label">💡 Sugestões comportamentais:</span>
+              {availableSoftSuggestions.map(s => (
+                <button key={s} type="button" className="skill-suggestion-btn skill-suggestion-btn--soft" onClick={() => addSoftSkill(s)}>{s}</button>
               ))}
             </div>
           )}
@@ -572,30 +648,30 @@ ${certifications.filter(c => c.name).map(c => `${c.name} - ${c.issuer} (${c.year
         {/* =========== SEÇÃO 6: PROJETOS =========== */}
         <section style={{ marginTop: '2rem' }}>
           <h2 style={{ fontSize: '1.2rem', marginBottom: '1rem', color: 'var(--accent-color)', display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
-            6. 📦 Projetos / Portfólio
+            6. 📦 Projetos Pessoais / Portfólio
             <SectionBadge ok={projects.some(p => p.name.trim())} empty={!projects.some(p => p.name.trim())} />
           </h2>
           <p style={{ fontSize: '0.85rem', color: 'var(--text-secondary)', marginBottom: '1rem', padding: '0.75rem', backgroundColor: 'var(--bg-surface)', borderRadius: '6px' }}>
-            💡 <strong>Para iniciantes:</strong> projetos pessoais são seu maior diferencial! Clone do Twitter, To-do list, APIs REST — tudo conta.
+            💡 <strong>Projetos provam capacidade arquitetural:</strong> sistemas nichados (fitness, finanças, delivery), ferramentas open-source, APIs de automação, plataformas com lógica de negócio complexa — tudo isso diferencia você de candidatos com apenas cursos no currículo.
           </p>
           {projects.map((proj, index) => (
             <div key={index} style={{ marginBottom: '1.5rem', padding: '1.5rem', backgroundColor: 'var(--bg-surface)', borderRadius: '8px' }}>
               <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1rem' }}>
                 <div style={{ gridColumn: 'span 2' }}>
                   <label>Nome do Projeto</label>
-                  <input type="text" value={proj.name} onChange={e => updateProject(index, 'name', e.target.value)} placeholder="Ex: API de Gestão de Tarefas" />
+                  <input type="text" value={proj.name} onChange={e => updateProject(index, 'name', e.target.value)} placeholder="Ex: Sistema de Gerenciamento Fitness (SaaS)" />
                 </div>
                 <div>
                   <label>Tecnologias</label>
-                  <input type="text" value={proj.tech} onChange={e => updateProject(index, 'tech', e.target.value)} placeholder="Ex: Node.js, PostgreSQL, Docker" />
+                  <input type="text" value={proj.tech} onChange={e => updateProject(index, 'tech', e.target.value)} placeholder="Ex: Spring Boot, React, PostgreSQL, Docker" />
                 </div>
                 <div>
                   <label>Link (GitHub / Demo)</label>
                   <input type="text" value={proj.link} onChange={e => updateProject(index, 'link', e.target.value)} placeholder="github.com/user/repo" />
                 </div>
                 <div style={{ gridColumn: 'span 2' }}>
-                  <label>Descrição breve</label>
-                  <textarea rows={2} value={proj.description} onChange={e => updateProject(index, 'description', e.target.value)} placeholder="O que o projeto faz e qual problema resolve." />
+                  <label>Descrição breve <Tip text='Descreva qual problema o projeto resolve e o impacto. Ex: "Plataforma SaaS com módulos de agendamento, controle de alunos e relatórios de evolução física, servindo 3 academias em produção."' /></label>
+                  <textarea rows={2} value={proj.description} onChange={e => updateProject(index, 'description', e.target.value)} onBlur={e => updateProject(index, 'description', autocorrectPtBr(e.target.value))} placeholder='Descreva o problema resolvido e o impacto real. Ex: Plataforma SaaS de gestão fitness com agendamentos, análise de evolução e notificações automáticas, utilizada por 3 academias em produção.' />
                 </div>
               </div>
               {projects.length > 1 && (
@@ -733,22 +809,22 @@ ${certifications.filter(c => c.name).map(c => `${c.name} - ${c.issuer} (${c.year
                         <div className="tech-social-list">
                           {personalInfo.linkedin && (
                             <div className="tech-contact-item">
-                              <span className="social-icon">in</span> {safeDecodeURI(personalInfo.linkedin.replace(/^(?:https?:\/\/)?(?:www\.)?linkedin\.com\/in\//i, '').replace(/\/$/, ''))}
+                              <span className="social-icon">in</span> {cleanSocialUrl(personalInfo.linkedin, 'linkedin')}
                             </div>
                           )}
                           {personalInfo.github && (
                             <div className="tech-contact-item">
-                              <span className="social-icon">gh</span> {safeDecodeURI(personalInfo.github.replace(/^(?:https?:\/\/)?(?:www\.)?github\.com\//i, '').replace(/\/$/, ''))}
+                              <span className="social-icon">gh</span> {cleanSocialUrl(personalInfo.github, 'github')}
                             </div>
                           )}
                           {personalInfo.portfolio && (
                             <div className="tech-contact-item">
-                              <span className="social-icon">🌐</span> {safeDecodeURI(personalInfo.portfolio.replace(/^(?:https?:\/\/)?(?:www\.)?/i, ''))}
+                              <span className="social-icon">🌐</span> {cleanSocialUrl(personalInfo.portfolio, 'portfolio')}
                             </div>
                           )}
                           {personalInfo.instagram && (
                             <div className="tech-contact-item">
-                              <span className="social-icon">ig</span> {safeDecodeURI(personalInfo.instagram.replace(/^(?:https?:\/\/)?(?:www\.)?(?:instagram\.com\/)([^\s/?#]+).*/i, '$1'))}
+                              <span className="social-icon">ig</span> {cleanSocialUrl(personalInfo.instagram, 'instagram')}
                             </div>
                           )}
                         </div>
@@ -766,25 +842,25 @@ ${certifications.filter(c => c.name).map(c => `${c.name} - ${c.issuer} (${c.year
                           {personalInfo.linkedin && (
                             <span className="social-item">
                               <svg className="icon" viewBox="0 0 24 24" fill="currentColor"><path d="M19 0h-14c-2.761 0-5 2.239-5 5v14c0 2.761 2.239 5 5 5h14c2.762 0 5-2.239 5-5v-14c0-2.761-2.238-5-5-5zm-11 19h-3v-11h3v11zm-1.5-12.268c-.966 0-1.75-.79-1.75-1.764s.784-1.764 1.75-1.764 1.75.79 1.75 1.764-.783 1.764-1.75 1.764zm13.5 12.268h-3v-5.604c0-3.368-4-3.113-4 0v5.604h-3v-11h3v1.765c1.396-2.586 7-2.777 7 2.476v6.759z"/></svg>
-                              {safeDecodeURI(personalInfo.linkedin.replace(/^(?:https?:\/\/)?(?:www\.)?linkedin\.com\/in\//i, '').replace(/\/$/, ''))}
+                              {cleanSocialUrl(personalInfo.linkedin, 'linkedin')}
                             </span>
                           )}
                           {personalInfo.github && (
                             <span className="social-item">
                               <svg className="icon" viewBox="0 0 24 24" fill="currentColor"><path d="M12 0c-6.626 0-12 5.373-12 12 0 5.302 3.438 9.8 8.207 11.387.599.111.793-.261.793-.577v-2.235c-3.338.726-4.042-1.416-4.042-1.416-.546-1.387-1.333-1.756-1.333-1.756-1.089-.745.083-.729.083-.729 1.205.084 1.839 1.237 1.839 1.237 1.07 1.834 2.807 1.304 3.492.997.107-.775.418-1.305.762-1.604-2.665-.305-5.467-1.334-5.467-5.931 0-1.311.469-2.381 1.236-3.221-.124-.303-.535-1.524.117-3.176 0 0 1.008-.322 3.301 1.23.957-.266 1.983-.399 3.003-.404 1.02.005 2.047.138 3.006.404 2.291-1.552 3.297-1.23 3.297-1.23.653 1.653.242 2.874.118 3.176.77.84 1.235 1.911 1.235 3.221 0 4.609-2.807 5.624-5.479 5.921.43.372.823 1.102.823 2.222v3.293c0 .319.192.694.801.576 4.765-1.589 8.199-6.086 8.199-11.386 0-6.627-5.373-12-12-12z"/></svg>
-                              {safeDecodeURI(personalInfo.github.replace(/^(?:https?:\/\/)?(?:www\.)?github\.com\//i, '').replace(/\/$/, ''))}
+                              {cleanSocialUrl(personalInfo.github, 'github')}
                             </span>
                           )}
                           {personalInfo.portfolio && (
                             <span className="social-item">
                               <svg className="icon" viewBox="0 0 24 24" fill="currentColor"><path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm-1 17.93V18h2v1.93c-2.75-.28-5-2.56-5.18-5.29l1.86-.62c.16 1.79 1.38 3.28 3.32 3.92zm4-1.86l-1.86.62C12.98 16.91 11.76 16 11 16v-2c1.66 0 3 1.34 3 3l1-.5v1.57zM18 12h-2c0-2.21-1.79-4-4-4V6c3.31 0 6 2.69 6 6z"/></svg>
-                              {safeDecodeURI(personalInfo.portfolio.replace(/^(?:https?:\/\/)?(?:www\.)?/i, ''))}
+                              {cleanSocialUrl(personalInfo.portfolio, 'portfolio')}
                             </span>
                           )}
                           {personalInfo.instagram && (
                             <span className="social-item">
                               <svg className="icon" viewBox="0 0 24 24" fill="currentColor"><path d="M12 2.163c3.204 0 3.584.012 4.85.07 3.252.148 4.771 1.691 4.919 4.919.058 1.266.069 1.645.069 4.849 0 3.205-.012 3.584-.069 4.849-.149 3.225-1.664 4.771-4.919 4.919-1.266.058-1.644.07-4.85.07-3.204 0-3.584-.012-4.849-.07-3.26-.149-4.771-1.699-4.919-4.92-.058-1.265-.07-1.644-.07-4.849 0-3.204.013-3.048.07-4.849.149-3.227 1.664-4.771 4.919-4.919 1.266-.057 1.21-.07 4.849-.07zm0-2.163c-3.259 0-3.667.014-4.947.072-4.358.2-6.78 2.618-6.98 6.98-.059 1.281-.073 1.689-.073 4.948 0 3.259.014 3.668.072 4.948.2 4.358 2.618 6.78 6.98 6.98 1.281.058 1.689.072 4.948.072 3.259 0 3.668-.014 4.948-.072 4.354-.2 6.782-2.618 6.979-6.98.059-1.28.073-1.689.073-4.948 0-3.259-.014-3.667-.072-4.947-.196-4.354-2.617-6.78-6.979-6.98-1.281-.059-1.69-.073-4.949-.073zm0 5.838c-3.403 0-6.162 2.759-6.162 6.162s2.759 6.163 6.162 6.163 6.162-2.759 6.162-6.163-2.759-6.162-6.162-6.162zm0 10.162c-2.209 0-4-1.791-4-4s1.791-4 4-4 4 1.791 4 4-1.791 4-4 4zm6.406-11.845c-.796 0-1.441.645-1.441 1.44s.645 1.44 1.441 1.44c.795 0 1.439-.645 1.439-1.44s-.644-1.44-1.439-1.44z"/></svg>
-                              {safeDecodeURI(personalInfo.instagram.replace(/^(?:https?:\/\/)?(?:www\.)?(?:instagram\.com\/|portfolio\.|)([^\s/?#]+).*/i, '$1'))}
+                              {cleanSocialUrl(personalInfo.instagram, 'instagram')}
                             </span>
                           )}
                         </div>
@@ -837,14 +913,29 @@ ${certifications.filter(c => c.name).map(c => `${c.name} - ${c.issuer} (${c.year
                   </div>
                 )}
 
-                {skills.some(skill => skill.trim() !== '') && (
+                {(hardSkills.some(s => s.trim()) || softSkills.some(s => s.trim())) && (
                   <div className="resume-section">
                     <h2 className="section-title">Habilidades e Competências</h2>
-                    <ul style={{ margin: 0, paddingLeft: '20pt', display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '4pt' }}>
-                      {skills.filter(s => s.trim() !== '').map((skill, index) => (
-                        <li key={index} style={{ fontSize: '11pt' }}>{skill}</li>
-                      ))}
-                    </ul>
+                    {hardSkills.some(s => s.trim()) && (
+                      <>
+                        <p style={{ fontSize: '10pt', fontWeight: '700', margin: '0 0 4pt 0', color: '#222' }}>Hard Skills</p>
+                        <ul style={{ margin: '0 0 8pt 0', paddingLeft: '20pt', display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '3pt' }}>
+                          {hardSkills.filter(s => s.trim()).map((skill, index) => (
+                            <li key={index} style={{ fontSize: '11pt' }}>{skill}</li>
+                          ))}
+                        </ul>
+                      </>
+                    )}
+                    {softSkills.some(s => s.trim()) && (
+                      <>
+                        <p style={{ fontSize: '10pt', fontWeight: '700', margin: '4pt 0 4pt 0', color: '#222' }}>Soft Skills</p>
+                        <ul style={{ margin: 0, paddingLeft: '20pt', display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '3pt' }}>
+                          {softSkills.filter(s => s.trim()).map((skill, index) => (
+                            <li key={index} style={{ fontSize: '11pt' }}>{skill}</li>
+                          ))}
+                        </ul>
+                      </>
+                    )}
                   </div>
                 )}
 

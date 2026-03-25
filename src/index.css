@@ -377,3 +377,10 @@ label { display: block; font-size: 0.875rem; color: var(--text-secondary); margi
 .skill-suggestions-label { font-size:.78rem; color:var(--text-secondary); font-weight:600; }
 .skill-suggestion-btn { background:var(--bg-surface); border:1px solid var(--border-color); color:var(--text-secondary); border-radius:20px; padding:.2rem .65rem; font-size:.78rem; cursor:pointer; transition:background .15s,border-color .15s,color .15s; font-family:'Inter',sans-serif; }
 .skill-suggestion-btn:hover { background:rgba(99,102,241,.15); border-color:var(--accent-color); color:#c7d2fe; }
+
+/* Soft Skill variant — teal palette to distinguish from Hard Skills (indigo) */
+.skill-tag--soft { background:rgba(20,184,166,.18); border-color:rgba(20,184,166,.4); color:#99f6e4; }
+.skill-tag--soft .skill-tag-remove { color:#5eead4; }
+.skill-tag--soft .skill-tag-remove:hover { color:#f87171; }
+.skill-suggestion-btn--soft:hover { background:rgba(20,184,166,.15); border-color:#14b8a6; color:#99f6e4; }
+
