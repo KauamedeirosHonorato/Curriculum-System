@@ -692,7 +692,7 @@ ${certifications.filter(c => c.name).map(c => `${c.name} - ${c.issuer} (${c.year
             <div key={index} style={{ display: 'grid', gridTemplateColumns: '1fr 1fr auto', gap: '1rem', alignItems: 'end', marginBottom: '0.75rem' }}>
               <div>
                 <label>Idioma</label>
-                <input style={{ marginBottom: 0 }} type="text" value={lang.name} onChange={e => updateLanguage(index, 'name', e.target.value)} placeholder="Ex: Inglês" />
+                <input style={{ marginBottom: 0 }} type="text" value={lang.name} onChange={e => updateLanguage(index, 'name', e.target.value)} onBlur={e => updateLanguage(index, 'name', autocorrectPtBr(e.target.value))} placeholder="Ex: Inglês" />
               </div>
               <div>
                 <label>Nível</label>
@@ -723,11 +723,11 @@ ${certifications.filter(c => c.name).map(c => `${c.name} - ${c.issuer} (${c.year
             <div key={index} style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 80px', gap: '1rem', alignItems: 'end', marginBottom: '0.75rem' }}>
               <div>
                 <label>Nome do Certificado</label>
-                <input style={{ marginBottom: 0 }} type="text" value={cert.name} onChange={e => updateCert(index, 'name', e.target.value)} placeholder="Ex: AWS Certified Developer" />
+                <input style={{ marginBottom: 0 }} type="text" value={cert.name} onChange={e => updateCert(index, 'name', e.target.value)} onBlur={e => updateCert(index, 'name', autocorrectPtBr(e.target.value))} placeholder="Ex: Carreira Java, FrontEnd, Backend com Java e Spring Boot" />
               </div>
               <div>
                 <label>Emitido por</label>
-                <input style={{ marginBottom: 0 }} type="text" value={cert.issuer} onChange={e => updateCert(index, 'issuer', e.target.value)} placeholder="Ex: Amazon, Alura, DIO" />
+                <input style={{ marginBottom: 0 }} type="text" value={cert.issuer} onChange={e => updateCert(index, 'issuer', e.target.value)} onBlur={e => updateCert(index, 'issuer', autocorrectPtBr(e.target.value))} placeholder="Ex: Alura, DIO, Rocketseat" />
               </div>
               <div>
                 <label>Ano</label>
